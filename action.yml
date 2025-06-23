@@ -15,7 +15,7 @@ inputs:
     description: "The Apple ID username to use for notarization."
     required: true
   password:
-    description: "The Apple ID password to use for notarization."
+    description: "The Apple app-specific password to use for notarization."
     required: true
   apple-team-id:
     description: "The Apple Team ID to use for signing and notarization."
@@ -67,11 +67,6 @@ runs:
           exit 1
         fi
 
-    - name: Install dependencies
-      shell: bash
-      run: |
-        brew install zip
-
     - name: Create temporary name
       id: name
       shell: bash
@@ -97,13 +92,13 @@ runs:
     - name: Code sign
       shell: bash
       run: |
-        security find-identity -v ${{ steps.name.outputs.keychain_name }}.keychain | grep "${{ inputs.apple-team-id }}" | grep "Developer ID Application"
+        IDENT=$(security find-identity -v ${{ steps.name.outputs.keychain_name }}.keychain | grep "${{ inputs.apple-team-id }}" | grep "Developer ID Application" | awk -F '"' '{print $2}')
         PATHS=$(cat << APP-PATH-DELIMITER-95654260
         ${{ inputs.app-path }}
         APP-PATH-DELIMITER-95654260
         )
         echo "$PATHS" | tr '\n' '\0' | xargs -0 -r \
-          codesign --keychain ${{ steps.name.outputs.keychain_name }}.keychain --force --deep --sign "${{ inputs.apple-team-id }}" ${{ env.entitlements_arg }} --options=runtime
+          codesign --keychain ${{ steps.name.outputs.keychain_name }}.keychain --force --deep --sign "$IDENT" ${{ env.entitlements_arg }} --options=runtime --timestamp
 
     - name: Create a tmp directory
       id: tmp
@@ -122,7 +117,7 @@ runs:
         APP-PATH-DELIMITER-95654260
         )
         echo "$PATHS" | tr '\n' '\0' | xargs -0 -r \
-          zip "$ZIP_PATH"
+          zip -r "$ZIP_PATH"
         echo "zip_path=$ZIP_PATH" >> $GITHUB_OUTPUT
 
     - name: Notarize
